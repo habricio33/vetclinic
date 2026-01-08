@@ -1,8 +1,47 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { Database } from '../types/supabase';
 import { IMAGES } from '../constants';
 
+type AppointmentWithDetails = Database['public']['Tables']['appointments']['Row'] & {
+  patients: (Database['public']['Tables']['patients']['Row'] & {
+    owners: Database['public']['Tables']['owners']['Row'] | null;
+  }) | null;
+};
+
 const AgendaView: React.FC = () => {
+  const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const fetchAppointments = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*, patients(*, owners(*))')
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching appointments:', error);
+    } else {
+      setAppointments((data as any) || []);
+    }
+    setLoading(false);
+  };
+
+  const getDayAppointments = (day: number) => {
+    return appointments.filter(app => {
+      const appDate = new Date(app.start_time);
+      return appDate.getDate() === day && appDate.getMonth() === selectedDate.getMonth();
+    });
+  };
+
+  const currentDayAppointments = getDayAppointments(selectedDate.getDate());
+
   return (
     <div className="flex flex-col h-full bg-background-light">
       <div className="px-8 py-4 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 z-10 shadow-sm">
@@ -14,7 +53,9 @@ const AgendaView: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <button className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-600 border border-gray-200"><span className="material-symbols-outlined">chevron_left</span></button>
-            <h3 className="text-xl font-bold text-gray-900 w-40 text-center">Outubro 2023</h3>
+            <h3 className="text-xl font-bold text-gray-900 w-48 text-center">
+              {selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </h3>
             <button className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-600 border border-gray-200"><span className="material-symbols-outlined">chevron_right</span></button>
           </div>
         </div>
@@ -29,34 +70,39 @@ const AgendaView: React.FC = () => {
         {/* Calendar Grid */}
         <div className="flex-1 bg-white p-6 overflow-y-auto no-scrollbar">
           <div className="grid grid-cols-7 mb-4">
-            {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map(day => (
-              <div key={day} className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider">{day}</div>
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+              <div key={day} className="text-center text-xs font-black text-gray-400 uppercase tracking-widest">{day}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 grid-rows-5 gap-4 h-full min-h-[600px]">
+          <div className="grid grid-cols-7 grid-rows-5 gap-4 h-full min-h-[500px]">
             {Array.from({ length: 35 }).map((_, idx) => {
-              const day = idx - 1; // Simplistic calendar logic
-              const isCurrent = day === 18;
+              const day = idx - 2; // Fixed simplistic logic for demonstration
+              const isCurrent = day === selectedDate.getDate();
+              const dayApps = day > 0 && day <= 31 ? getDayAppointments(day) : [];
               const isPrevNext = day <= 0 || day > 31;
-              
+
               return (
-                <div key={idx} className={`border rounded-xl p-2 transition-all cursor-pointer ${
-                  isCurrent ? 'border-2 border-primary bg-primary/5 ring-2 ring-primary/10 shadow-md' : 
-                  isPrevNext ? 'border-gray-100 bg-gray-50/50 opacity-60' : 'border-gray-200 bg-white hover:border-primary/50 hover:shadow-md'
-                }`}>
-                  <span className={`text-sm font-bold ${isCurrent ? 'text-primary' : isPrevNext ? 'text-gray-400' : 'text-gray-700'}`}>
+                <div
+                  key={idx}
+                  onClick={() => day > 0 && day <= 31 && setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day))}
+                  className={`border rounded-2xl p-3 transition-all cursor-pointer flex flex-col ${isCurrent ? 'border-2 border-primary bg-primary/5 ring-4 ring-primary/5 shadow-lg' :
+                    isPrevNext ? 'border-gray-50 bg-gray-50/30 opacity-40' : 'border-gray-100 bg-white hover:border-primary/50 hover:shadow-md'
+                    }`}
+                >
+                  <span className={`text-sm font-black ${isCurrent ? 'text-primary' : isPrevNext ? 'text-gray-300' : 'text-text-main'}`}>
                     {day <= 0 ? 30 + day : day > 31 ? day - 31 : day}
                   </span>
-                  
-                  {isCurrent && (
+
+                  {dayApps.length > 0 && (
                     <div className="mt-2 space-y-1 overflow-hidden">
-                      <div className="bg-white border-l-2 border-accent-blue text-[10px] p-1.5 rounded shadow-sm font-bold truncate flex justify-between">
-                        <span>Rex</span> <span className="text-gray-400">14:00</span>
-                      </div>
-                      <div className="bg-white border-l-2 border-accent-purple text-[10px] p-1.5 rounded shadow-sm font-bold truncate flex justify-between">
-                        <span>Luna</span> <span className="text-gray-400">14:45</span>
-                      </div>
-                      <div className="text-center text-[10px] text-gray-500 font-medium py-1">+2 agend.</div>
+                      {dayApps.slice(0, 2).map((app, i) => (
+                        <div key={i} className="bg-white border-l-2 border-primary text-[9px] p-1 rounded shadow-sm font-bold truncate">
+                          {app.patients?.name}
+                        </div>
+                      ))}
+                      {dayApps.length > 2 && (
+                        <div className="text-center text-[9px] text-gray-400 font-bold">+{dayApps.length - 2}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -66,53 +112,73 @@ const AgendaView: React.FC = () => {
         </div>
 
         {/* Side Detail Bar */}
-        <div className="w-96 bg-white border-l border-gray-100 flex flex-col shadow-xl z-10">
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
+        <div className="w-96 bg-white border-l border-gray-100 flex flex-col shadow-xl z-20">
+          <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">18 de Outubro</h3>
-              <p className="text-sm text-gray-500 mt-0.5 font-medium">Quarta-feira</p>
+              <h3 className="text-xl font-black text-text-main">
+                {selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+              </h3>
+              <p className="text-sm text-text-secondary font-bold tracking-widest uppercase mt-1">
+                {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long' })}
+              </p>
             </div>
-            <div className="bg-primary/10 text-primary font-bold px-3 py-1 rounded-full text-xs">
-              4 Agendamentos
+            <div className="bg-primary/10 text-primary font-black px-4 py-2 rounded-xl text-xs">
+              {currentDayAppointments.length} Agend.
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {[
-              { time: '14:00', patient: 'Rex', tutor: 'Ana Paula', service: 'Vacinação V10', status: 'Aguardando', color: 'bg-yellow-400', img: IMAGES.REX },
-              { time: '14:45', patient: 'Luna', tutor: 'Marcos Silva', service: 'Consulta Dermatol.', status: 'Confirmado', color: 'bg-green-500', img: IMAGES.LUNA },
-              { time: '15:30', patient: 'Thor', tutor: 'Carla Dias', service: 'Retorno', status: 'Confirmado', color: 'bg-green-500', img: IMAGES.THOR },
-            ].map((app, i) => (
-              <div key={i} className="flex gap-4 p-4 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${app.color} rounded-l-xl`}></div>
-                <div className="flex flex-col items-center gap-1 min-w-[3rem]">
-                  <span className="text-base font-black text-gray-900">{app.time}</span>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">30 min</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-3">
-                    <img src={app.img} className="size-10 rounded-full border border-gray-100 shadow-sm object-cover" alt={app.patient} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-gray-900 leading-tight truncate">{app.patient}</p>
-                      <p className="text-xs text-gray-500 truncate">{app.tutor}</p>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-2.5 space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="material-symbols-outlined text-[16px] text-primary">medical_services</span>
-                      <span className="truncate font-semibold">{app.service}</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${app.status === 'Confirmado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {app.status}
-                    </span>
-                    <button className="text-gray-400 hover:text-primary transition-colors">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                  </div>
-                </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 no-scrollbar">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="size-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                <p className="text-[10px] font-black text-text-secondary uppercase tracking-widest">Buscando...</p>
               </div>
-            ))}
+            ) : currentDayAppointments.length > 0 ? (
+              currentDayAppointments.map((app) => (
+                <div key={app.id} className="flex gap-4 p-5 rounded-[24px] bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-l-2xl"></div>
+                  <div className="flex flex-col items-center gap-1 min-w-[3.5rem] pt-1">
+                    <span className="text-lg font-black text-text-main">
+                      {new Date(app.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">30 min</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-4 mb-4">
+                      {app.patients?.image_url ? (
+                        <img src={app.patients.image_url} className="size-12 rounded-2xl border border-gray-100 shadow-sm object-cover" alt={app.patients.name} />
+                      ) : (
+                        <div className="size-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-300">
+                          <span className="material-symbols-outlined">pets</span>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-base font-black text-text-main leading-tight truncate">{app.patients?.name}</p>
+                        <p className="text-xs text-text-secondary font-medium truncate">{app.patients?.owners?.full_name}</p>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-3">
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <span className="material-symbols-outlined text-[18px] text-primary font-bold">medical_services</span>
+                        <span className="truncate font-bold">{app.type}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${app.status === 'Confirmado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {app.status || 'Pendente'}
+                      </span>
+                      <button className="text-gray-400 hover:text-primary transition-colors">
+                        <span className="material-symbols-outlined text-[20px] font-bold">edit</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-40">
+                <span className="material-symbols-outlined text-6xl">event_busy</span>
+                <p className="text-xs font-black uppercase tracking-widest">Nenhum agendamento</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
