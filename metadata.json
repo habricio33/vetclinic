@@ -1,0 +1,8 @@
+{
+  "name": "VetClinic Pro - Gestão Inteligente",
+  "description": "Uma plataforma completa para gestão de clínicas veterinárias, incluindo agenda inteligente, controle de estoque, prontuários de pacientes e assistente de IA para diagnósticos e suporte.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
